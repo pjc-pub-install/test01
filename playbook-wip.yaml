@@ -1,0 +1,227 @@
+# Ansible Playbook for Bootstrapping a (new) Personal Computer
+- name: bootstrap stub workstation
+  hosts: localhost
+  connection: local
+  become: true
+  vars:
+    playbook_tmp_dir: /tmp/pjc/ansible/bootstrap
+  tasks:
+
+  - name: set alt+tab to switch windows only on current workspace
+    become: false
+    shell: gsettings set org.gnome.shell.app-switcher current-workspace-only true
+
+  - name: sake temporary directory
+    become: false
+    file:
+      path: "{{ playbook_tmp_dir }}"
+      state: directory
+
+  - name: Download AnyDesk
+    get_url:
+      url: https://anydesk.com/en/downloads/thank-you?dv=deb_64
+      dest: "{{ tmp_dir }}/anydesk.deb"
+
+  - name: Download argocd
+    get_url:
+      url: https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+      dest: /usr/local/bin/argocd
+      mode: 0755
+
+  - name: Download Chia light wallet
+    get_url:
+      url: https://download.chia.net/latest/x86_64-Ubuntu-gui
+      dest: "{{ tmp_dir }}/chia_blockchain.deb"
+
+  - name: Download Discord
+    get_url:
+      url: https://discordapp.com/api/download?platform=linux&format=deb
+      dest: "{{ tmp_dir }}/discord.deb"
+
+  - name: Download yq
+    get_url:
+      url: https://github.com/mikefarah/yq/releases/download/v4.18.1/yq_linux_amd64
+      dest: /usr/local/bin/yq
+      mode: 0755
+
+  - name: Download kind
+    get_url:
+      url: https://kind.sigs.k8s.io/dl/v0.13.0/kind-linux-amd64
+      dest: /usr/local/bin/kind
+      mode: 0755
+
+  - name: Add APT keys
+    apt_key:
+      url: "{{ item }}"
+    loop:
+    - "https://download.docker.com/linux/ubuntu/gpg"
+    - "https://packages.cloud.google.com/apt/doc/apt-key.gpg"
+    - "https://download.sublimetext.com/sublimehq-pub.gpg"
+    - "https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg"
+
+  - name: Add APT repositories
+    apt_repository:
+      repo: "{{ item }}"
+    loop:
+    - "deb [arch=amd64 trusted=yes] https://download.docker.com/linux/ubuntu focal stable"
+    - "deb [arch=amd64 trusted=yes] https://apt.kubernetes.io/ kubernetes-xenial main"
+    - "deb [arch=amd64 trusted=yes] https://download.sublimetext.com/ apt/stable/"
+    - "deb [arch=amd64 trusted=yes] https://brave-browser-apt-release.s3.brave.com/ stable main"
+
+  - name: Install Python packages
+    pip:
+      name:
+      - boto3
+      - catt
+      - gitpython
+      - pytest
+      - pyyaml
+      - regex
+      - requests
+      - termcolor
+      - youtube-dl
+
+  - name: Install packages
+    apt:
+      pkg:
+      - acpi
+      - ansible  # so meta!
+      - apt-transport-https
+      - audacity
+      - bash-completion
+      - bc
+      - ca-certificates
+      - cmake
+      - containerd.io
+      - cpu-x
+      - curl
+      - dino-im
+      - dnsutils
+      - docker-ce
+      - docker-ce-cli
+      - docker-compose-plugin
+      - dos2unix
+      - electrum
+      - evtest
+      - fd-find
+      - file
+      - fzf
+      - gimp
+      - git
+      - gnome-shell
+      - gnome-tweak-tool
+      - gnome-tweaks
+      - gpg
+      - htop
+      - jq
+      - keepassxc
+      - kubectl
+      - libreoffice
+      - lmms
+      - mixxx
+      - ncdu
+      - netcat
+      - nmap
+      - obs-studio
+      - openssh-server
+      - pandoc
+      - python3-pip
+      - qpdf
+      - sublime-text
+      - syncthing
+      - tar
+      - tcpdump
+      - texlive
+      - texlive-xetex
+      - traceroute
+      - tree
+      - unzip
+      - usbutils
+      - vim
+      - vlc
+      - wget
+      - whois
+      - wireshark
+      - zip
+
+  - name: Install deb packages
+    apt:
+      deb: "{{ item }}"
+    loop:
+    - https://github.com/sharkdp/bat/releases/download/v0.22.1/bat_0.22.1_amd64.deb
+    - https://go.skype.com/skypeforlinux-64.deb
+    - https://repo.steampowered.com/steam/archive/stable/steam_latest.deb
+    - https://zoom.us/client/latest/zoom_amd64.deb
+
+  - name: Install Zerotier
+    args:
+      warn: false  # to suppress warning suggesting usage of `get_url` module
+    shell: curl -s https://install.zerotier.com | sudo bash
+
+  - name: Download and unarchive aws (CLI) and helm
+    unarchive:
+      remote_src: yes
+      src: "{{ item }}"
+      dest: "{{ tmp_dir }}"
+    loop:
+    - https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
+    - https://get.helm.sh/helm-v3.11.0-linux-amd64.tar.gz
+
+  - name: Install AWS CLI
+    command: "{{ tmp_dir }}/aws/install --update"
+
+  - name: Download and unarchive terraform
+    unarchive:
+      remote_src: yes
+      src: https://releases.hashicorp.com/terraform/1.3.7/terraform_1.3.7_linux_amd64.zip
+      dest: /usr/local/bin/
+
+  - name: Move helm into path
+    copy:
+      src: "{{ tmp_dir }}/linux-amd64/helm"
+      dest: /usr/local/bin/helm
+      mode: 0755
+
+  - name: Create docker and wireshark groups
+    group:
+      name: "{{ item }}"
+    loop:
+    - docker
+    - wireshark
+
+  - name: Add user to docker and wireshark groups
+    user:
+      name: "{{ lookup('env', 'USER') }}"
+      groups: "{{ item }}"
+      append: yes
+    loop:
+    - docker
+    - wireshark
+
+  - name: Enable and start service docker
+    service:
+      name: docker
+      enabled: yes
+      state: started
+
+  - name: Enable and start service syncthing
+    service:
+      name: "syncthing@{{ lookup('env', 'USER') }}"
+      enabled: yes
+      state: started
+
+  - name: Install Gnome Shell extensions
+    become: false
+    role: jaredhocutt.gnome_extensions
+    vars:
+      gnome_extension_ids:
+      - 21  # workspace indicator
+      - 2890  # tray icons: reloaded
+      - 4669  # keyboard backlight slider
+      - 120  # system-monitor
+
+  - name: Remove temporary directory
+    file:
+      path: "{{ tmp_dir }}"
+      state: absent
+
